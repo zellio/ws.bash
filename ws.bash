@@ -145,4 +145,126 @@ function wsb__handshake
 		wsb__handshake_callback "$handshake_response"
 }
 
+function wsb__read_bytes
+{
+	head --bytes="${1:-1}"
+}
+
+function wsb__read_bytes_as_int
+{
+	wsb__read_bytes "$1" | hexdump --format '"%u"'
+}
+
+function wsb__read_bytes_hex
+{
+	wsb__read_bytes "$1" | xxd --plain
+}
+
+function ord
+{
+	echo -n "${1:-0}" | hexdump --no-squeezing --format '"%u"'
+}
+
+function wsb__apply_mask
+{
+	local -r mask="$1"
+	local -r hex_payload="$2"
+
+	local masked_data
+	local -a masked_bytes
+	local -i index=0
+
+	while IFS= read c; do
+		masking_bytes[$index]="$(ord "$c")"
+		(( index += 1 ))
+	done < <(echo "$mask" | fold --bytes --width=1)
+
+	index=0
+	while IFS= read -r c; do
+		(( _mb = 0x$c ^ masking_bytes[index],
+		   index = (index + 1) % 4 ))
+		masked_data+="$(printf "%.02x" "$_mb")"
+	done < <(echo "$hex_payload" | fold --bytes --width=2)
+
+	echo "$masked_data"
+}
+
+function wsb__frame_read
+{
+	exec 3<&0
+	exec 0<"$wsb_socket_out"
+
+	local -i fin
+	local -i rsv1
+	local -i rsv2
+	local -i rsv3
+	local -i opcode
+	local -i mask
+	local -i length
+
+	local payload byte
+
+	byte="$(wsb__read_bytes_as_int 1)"
+	((
+		fin = byte >> 7 & 0x01,
+		rsv1 = byte >> 6 & 0x01,
+		rsv2 = byte >> 5 & 0x01,
+		rsv3 = byte >> 4 & 0x01,
+ 		opcode = byte & 0x0f
+	))
+
+	byte="$(wsb__read_bytes_as_int 1)"
+	((
+		mask = byte >> 7 & 0x01,
+		length = byte & 0x7f
+	))
+
+	if (( length == 126 )); then
+		length="$(wsb__read_bytes_as_int 2)"
+	elif (( length == 127 )); then
+		length="$(wsb__read_bytes_as_int 4)"
+	fi
+
+	local masking_key
+	if (( mask )); then
+		masking_key="$(wsb__read_bytes 4)"
+	fi
+
+	local hex_payload="$(wsb__read_bytes_hex "$length")"
+	if (( ${#masking_key} )); then
+		unmasked_hex_payload="$(wsb__apply_mask "$masking_key" "$hex_payload")"
+		payload="$(echo "$unmasked_hex_payload" | xxd --plain)"
+	fi
+
+	exec 0<&3
+	exec 3<&-
+
+	wsb__read_frame_fin="$fin"
+	wsb__read_frame_rsv1="$rsv1"
+	wsb__read_frame_rsv2="$rsv2"
+	wsb__read_frame_rsv3="$rsv3"
+	wsb__read_frame_opcode="$opcode"
+	wsb__read_frame_mask="$mask"
+	wsb__read_frame_length="$length"
+	wsb__read_frame_payload="$payload"
+}
+
+function wsb__frame_loop_ping_callback
+{
+
+}
+
+function wsb__frame_loop
+{
+	wsb__frame_loop_run=1
+	while (( wsb__frame_loop_run )); do
+		wsb__frame_read
+
+		is_function wsb__frame_loop_callback &&
+			wsb__frame_loop_callback
+
+		wsb__frame_loop_ping_callback
+	done
+}
+
 ### ws.bash ends here
