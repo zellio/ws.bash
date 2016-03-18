@@ -112,7 +112,6 @@ function wsb__socket_connect
 	wsb_socat_pid="$socat_pid"
 }
 
-
 function wsb__build_header
 {
 	local -r socket_key="${wsb_socket_key:-$(head --bytes=16 /dev/urandom | base64)}"
