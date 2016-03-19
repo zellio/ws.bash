@@ -262,8 +262,76 @@ function wsb__frame_read
 	wsb__read_frame_payload="$payload"
 }
 
+function wsb__frame_write
+{
+	local -ir fin="${wsb__write_frame_fin}"
+	local -ir rsv1="${wsb__write_frame_rsv1}"
+	local -ir rsv2="${wsb__write_frame_rsv2}"
+	local -ir rsv3="${wsb__write_frame_rsv3}"
+	local -ir opcode="${wsb__write_frame_opcode}"
+	local -r mask="${wsb__write_frame_mask}"
+	local -ir length="${wsb__write_frame_length}"
+	local -r payload="${wsb__write_frame_payload}"
+
+	local -i b1 b2
+	((
+		b1 = fin,
+		b1 = b1 << 1 | rsv1,
+		b1 = b1 << 1 | rsv2,
+		b1 = b1 << 1 | rsv3,
+		b1 = b1 << 4 | opcode,
+
+		_ml = ((length <= 126) ? length :
+			   ((length < 65536) ? 126 : 127)),
+
+		b2 = ((${#mask} == 4) << 7) | _ml
+	))
+
+	local hex_frame
+	hex_frame+="$(printf "%.02x" "$b1")"
+	hex_frame+="$(printf "%.02x" "$b2")"
+
+	if (( _ml == 126 )); then
+		hex_frame+="$(printf "%.04x" "$length")"
+	elif (( _ml == 127 )); then
+		hex_frame+="$(printf "%.08x" "$length")"
+	fi
+
+	hex_payload="$(echo -n "$payload" | xxd --plain)"
+	if [ "${#mask}" -eq 4 ]; then
+		hex_frame+="$(echo -n "$mask" | xxd --plain)"
+		hex_payload="$(wsb__apply_mask "$mask" "$hex_payload")"
+	fi
+
+	hex_frame+="$hex_payload"
+
+	echo "$hex_frame" | xxd --reverse --plain >"$wsb_socket_in"
+}
+
 function wsb__frame_loop_ping_callback
 {
+	:
+}
+
+function wsb__frame_loop_callback
+{
+
+# 	cat <<EOF
+#  $wsb__read_frame_fin
+#  $wsb__read_frame_rsv1
+#  $wsb__read_frame_rsv2
+#  $wsb__read_frame_rsv3
+#  $wsb__read_frame_opcode
+#  $wsb__read_frame_mask
+#  $wsb__read_frame_length
+#  $wsb__read_frame_payload
+# EOF
+	cat <<EOF
+FRAME END: $wsb__read_frame_fin
+FRAME LEN: $wsb__read_frame_length
+FRAME RLN: ${#wsb__read_frame_payload}
+FRAME PYL: $wsb__read_frame_payload
+EOF
 
 }
 
