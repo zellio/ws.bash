@@ -245,9 +245,9 @@ function wsb__frame_read
 
 	local hex_payload="$(wsb__read_bytes_hex "$length")"
 	if (( ${#masking_key} )); then
-		unmasked_hex_payload="$(wsb__apply_mask "$masking_key" "$hex_payload")"
-		payload="$(echo "$unmasked_hex_payload" | xxd --plain)"
+		hex_payload="$(wsb__apply_mask "$masking_key" "$hex_payload")"
 	fi
+	payload="$(echo "$hex_payload" | xxd --reverse --plain)"
 
 	exec 0<&3
 	exec 3<&-
