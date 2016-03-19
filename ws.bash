@@ -152,22 +152,30 @@ function wsb__handshake
 
 function wsb__read_bytes
 {
-	head --bytes="${1:-1}"
-}
-
-function wsb__read_bytes_as_int
-{
-	wsb__read_bytes "$1" | hexdump --format '"%u"'
-}
-
-function wsb__read_bytes_hex
-{
-	wsb__read_bytes "$1" | xxd --plain
+	head --bytes="${1:-1}" --zero-terminated --silent
 }
 
 function ord
 {
-	echo -n "${1:-0}" | hexdump --no-squeezing --format '"%u"'
+    echo -n "${1:-0}" | hexdump --no-squeezing --format '"%u"'
+}
+
+function wsb__read_bytes_as_int
+{
+	local bytes="${1:-0}"
+	local -i number=0
+
+	while (( bytes )); do
+		(( number = (number << 8) + $(wsb__read_bytes 1 | hexdump --format '"%u"'),
+		   bytes -= 1 ))
+	done
+
+	echo -n "$number"
+}
+
+function wsb__read_bytes_hex
+{
+	wsb__read_bytes "$1" | xxd --plain | tr -d '\n'
 }
 
 function wsb__apply_mask
