@@ -96,11 +96,17 @@ function wsb__socket_connect
 	local -r out_sock="${wsb_buffer_dir}/socket.stdout"
 	local -i socat_pid
 
-	local remote="tcp:"
+	local protocol port remote
 	if [ "$wsb_scheme" = 'wss' ]; then
-		remote="openssl:"
+		protocol="openssl"
+		port="${wsb_port:-443}"
+	else
+		protocol="tcp"
+		port="${wsb_port:-80}"
 	fi
-	remote+="$wsb_host:$wsb_port"
+	remote="$protocol:$wsb_host:$port"
+
+	echo "$remote"
 
 	mkfifo "$in_sock" "$out_sock"
 
