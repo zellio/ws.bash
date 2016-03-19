@@ -166,7 +166,8 @@ function wsb__read_bytes_as_int
 	local -i number=0
 
 	while (( bytes )); do
-		(( number = (number << 8) + $(wsb__read_bytes 1 | hexdump --format '"%u"'),
+		(( number = (number << 8),
+		   number += 0x$(wsb__read_bytes 1 | xxd --plain),
 		   bytes -= 1 ))
 	done
 
@@ -223,7 +224,7 @@ function wsb__frame_read
 		rsv1 = byte >> 6 & 0x01,
 		rsv2 = byte >> 5 & 0x01,
 		rsv3 = byte >> 4 & 0x01,
- 		opcode = byte & 0x0f
+		opcode = byte & 0x0f
 	))
 
 	byte="$(wsb__read_bytes_as_int 1)"
@@ -340,11 +341,8 @@ function wsb__frame_loop
 	wsb__frame_loop_run=1
 	while (( wsb__frame_loop_run )); do
 		wsb__frame_read
-
-		is_function wsb__frame_loop_callback &&
-			wsb__frame_loop_callback
-
 		wsb__frame_loop_ping_callback
+		wsb__frame_loop_callback
 	done
 }
 
